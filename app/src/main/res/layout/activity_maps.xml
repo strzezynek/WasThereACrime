@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools" android:layout_width="match_parent"
+    android:layout_height="match_parent" android:orientation="vertical"
+    tools:context="com.example.admin.wasthereacrime.activity.CrimeDetailsActivity">
+
+    <android.support.design.widget.AppBarLayout android:layout_height="wrap_content"
+        android:layout_width="match_parent" android:theme="@style/AppTheme.AppBarOverlay">
+
+    </android.support.design.widget.AppBarLayout>
+
+    <LinearLayout
+        android:id="@+id/test"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@color/colorPrimary"
+        android:weightSum="11">
+
+        <EditText
+            android:id="@+id/edit_start_date"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="5"
+            android:hint="@string/hint_start_date"/>
+
+        <EditText
+            android:id="@+id/edit_end_date"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="5"
+            android:hint="@string/hint_end_date"/>
+
+        <Button
+            android:id="@+id/btn_show_crimes"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Show"
+            android:background="@color/colorAccent"/>
+
+    </LinearLayout>
+
+    <android.support.design.widget.CoordinatorLayout android:layout_width="match_parent"
+        android:layout_height="match_parent" android:fitsSystemWindows="true">
+
+        <include layout="@layout/content_maps" />
+
+        <include layout="@layout/fabs_alarm" />
+
+        <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            >
+
+        <android.support.design.widget.FloatingActionButton
+            android:id="@+id/fab_heat"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="@dimen/fab_margin_small"
+            android:layout_marginTop="@dimen/fab_margin_small"
+            android:src="@mipmap/ic_alarm"/>
+
+        <android.support.design.widget.FloatingActionButton
+            android:id="@+id/fab_list"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginLeft="@dimen/fab_margin_small"
+            android:layout_marginTop="@dimen/fab_margin_small"
+            android:layout_toRightOf="@+id/fab_heat"
+            android:src="@mipmap/ic_call"/>
+
+        </RelativeLayout>
+
+    </android.support.design.widget.CoordinatorLayout>
+
+</LinearLayout>

@@ -1,0 +1,12 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context="com.example.admin.wasthereacrime.activity.MapsActivity">
+
+    <item android:id="@+id/action_show_heatmap" android:title="heat"
+            app:showAsAction="always" />
+
+    <item android:id="@+id/action_show_list" android:title="list"
+        app:showAsAction="always" />
+
+</menu>
