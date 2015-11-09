@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -37,10 +38,7 @@ public class ChartActivity extends AppCompatActivity implements LoaderManager.Lo
 
     private BarChart crimesChart;
     private boolean showMonths = false;
-    private Cursor cursor;
-
-    String maxValueKey = "";
-    int maxValue = 0;
+    private Cursor cursor = null;
 
     private String[] months = {"January", "February", "March", "April", "May", "June", "July",
                                 "August", "September", "October", "November", "December"};
@@ -61,7 +59,6 @@ public class ChartActivity extends AppCompatActivity implements LoaderManager.Lo
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-
         menu.add("Days").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         menu.add("Months").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
 
@@ -87,36 +84,14 @@ public class ChartActivity extends AppCompatActivity implements LoaderManager.Lo
         return false;
     }
 
-    @Override
-    protected void onStart() {
-        Log.d(TAG, "onStart");
-        super.onStart();
-    }
-
-    protected void onResume() {
-        Log.d(TAG, "onResume");
-        super.onResume();
-    }
-
-    protected void onPause() {
-        Log.d(TAG, "onPause");
-        super.onPause();
-    }
-
     protected void onStop() {
+        super.onStop();
         Log.d(TAG, "onStop");
         cursor.close();
-        super.onStop();
-    }
-
-    protected void onRestart() {
-        Log.d(TAG, "onRestart");
-        super.onRestart();
     }
 
     private void setData() {
-        Map<String, Integer> map = new HashMap<String, Integer>();
-
+        Map<String, Integer> map = new LinkedHashMap<String, Integer>();
         cursor.moveToFirst();
         while (!cursor.isAfterLast()) {
             String date = cursor.getString(cursor.getColumnIndexOrThrow(
@@ -132,10 +107,13 @@ public class ChartActivity extends AppCompatActivity implements LoaderManager.Lo
             cursor.moveToNext();
         }
 
-        lookForMaxValue(map);
 
+        //TODO return appropriate parameter (DONE)
+        String maxValueKey = lookForMaxValue(map);
+
+        //TODO check if hashmap can be sorted (HashMap can't be sorted but TreeMap can)
         List<String> xValues = new ArrayList<String>(map.keySet());
-        Collections.sort(xValues);
+//        Collections.sort(xValues);
 
         ArrayList<BarEntry> yValues = new ArrayList<BarEntry>();
         for (int i = 0; i < xValues.size(); i++) {
@@ -154,12 +132,12 @@ public class ChartActivity extends AppCompatActivity implements LoaderManager.Lo
         crimesChart.setData(data);
         crimesChart.invalidate();
 
-        Log.d(TAG, "Max key: " + maxValueKey + " max value: " + maxValue);
         crimesChart.highlightValue(xValues.indexOf(maxValueKey), 0);
     }
 
-    private void lookForMaxValue(Map<String, Integer> map) {
-
+    private String lookForMaxValue(Map<String, Integer> map) {
+        int maxValue = 0;
+        String maxValueKey = "";
         Iterator it = map.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<String, Integer> pair = (Map.Entry<String, Integer>) it.next();
@@ -170,15 +148,22 @@ public class ChartActivity extends AppCompatActivity implements LoaderManager.Lo
                 maxValue = num;
             }
         }
+        return maxValueKey;
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (cursor != null) {
+            cursor.close();
+        }
     }
 
     @Override
     public Loader<Cursor> onCreateLoader(int id, Bundle args) {
         String[] projection = {CrimeProvider.CrimeColumns.COL_DATE};
-        String selection = null;
-        String[] selectionArgs = null;
-        return new CursorLoader(ChartActivity.this, CrimeProvider.CONTENT_URI, projection, selection, selectionArgs,
-                null);
+        return new CursorLoader(ChartActivity.this, CrimeProvider.CONTENT_URI, projection, null, null,
+                CrimeProvider.CrimeColumns.COL_DATE + " ASC");
     }
 
     @Override

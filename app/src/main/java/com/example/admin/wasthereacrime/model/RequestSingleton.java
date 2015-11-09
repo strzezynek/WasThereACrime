@@ -8,27 +8,27 @@ import com.android.volley.toolbox.Volley;
 
 public class RequestSingleton {
 
-    private static RequestSingleton mInstance;
-    private RequestQueue mRequestQueue;
-    private static Context mContext;
+    private static RequestSingleton instance;
+    private RequestQueue requestQueue;
+    private static Context context;
 
     public RequestSingleton(Context context) {
-        mContext = context;
-        mRequestQueue = getRequestQueue();
+        this.context = context;
+        this.requestQueue = getRequestQueue();
     }
 
-    public static synchronized RequestSingleton getmInstance(Context context) {
-        if (mInstance == null) {
-            mInstance = new RequestSingleton(context);
+    public static synchronized RequestSingleton getInstance(Context context) {
+        if (instance == null) {
+            instance = new RequestSingleton(context);
         }
-        return mInstance;
+        return instance;
     }
 
     public RequestQueue getRequestQueue() {
-        if (mRequestQueue == null) {
-            mRequestQueue = Volley.newRequestQueue(mContext.getApplicationContext());
+        if (requestQueue == null) {
+            requestQueue = Volley.newRequestQueue(context.getApplicationContext());
         }
-        return mRequestQueue;
+        return requestQueue;
     }
 
     public <T> void addToRequestQueue(Request<T> request) {

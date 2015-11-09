@@ -18,6 +18,7 @@ import com.android.volley.toolbox.Volley;
 import com.example.admin.wasthereacrime.R;
 import com.example.admin.wasthereacrime.WasThereACrimeApp;
 import com.example.admin.wasthereacrime.helper.HelpNotifier;
+import com.example.admin.wasthereacrime.helper.StringParser;
 import com.example.admin.wasthereacrime.model.Crime;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -34,10 +35,8 @@ import org.json.JSONObject;
 public class CrimeActivity extends AppCompatActivity implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener {
 
     private static final String TAG = CrimeActivity.class.getSimpleName();
-//    private static final String EXTRA_CRIME_NAME = "crime_name";
-//    private static final String EXTRA_CRIME_DATE = "crime_date";
-//    private static final String EXTRA_CRIME_LAT = "crime_latitude";
-//    private static final String EXTRA_CRIME_LNG = "crime_longitude";
+
+    private static final double RADIUS_PLACES = 100.0;
 
     private WasThereACrimeApp app;
 
@@ -47,8 +46,6 @@ public class CrimeActivity extends AppCompatActivity implements GoogleApiClient.
     private ImageView placeImage;
 
     private LatLng placeCoords;
-
-//    private Crime crime;
 
     private GoogleApiClient mGoogleApiClient;
 
@@ -109,41 +106,24 @@ public class CrimeActivity extends AppCompatActivity implements GoogleApiClient.
     }
 
     private void getPlacePhoto() {
-        StringBuilder searchUrl = new StringBuilder();
-        searchUrl.append("https://maps.googleapis.com/maps/api/place/nearbysearch/");
-        searchUrl.append("json?");
-        searchUrl.append("location=");
-        searchUrl.append(String.valueOf(placeCoords.latitude));
-        searchUrl.append(",");
-        searchUrl.append(String.valueOf(placeCoords.longitude));
-        searchUrl.append("&radius=");
-        searchUrl.append(String.valueOf(100.0));
-        searchUrl.append("&key=");
-        searchUrl.append(getString(R.string.google_maps_key));
-
-        Log.d(TAG, "URL: " + searchUrl);
+        String searchUrl = StringParser.preparePlacesApiUrl(CrimeActivity.this, placeCoords,
+                RADIUS_PLACES);
 
         new PlacePhotoTask().execute(searchUrl.toString());
     }
 
     private void parseJSON(String json) {
-        Log.d(TAG, "json");
         try {
             JSONObject jsonObject = new JSONObject(json);
             JSONArray jsonArray = jsonObject.getJSONArray("results");
-            //loop looking for objects with key photo
             JSONObject placeJson = jsonArray.getJSONObject(1);
             String placeId = placeJson.getString("place_id");
-
-            Log.d(TAG, "PlaceId: " + placeId);
-            Log.d(TAG, "PlaceName: " + placeJson.getString("name"));
 
             new PhotoTask(placeImage.getWidth(), placeImage.getHeight()) {
 
                 @Override
                 protected void onPostExecute(AttributedPhoto attributedPhoto) {
                     if (attributedPhoto != null) {
-                        // Photo has been loaded, display it.
                         placeImage.setImageBitmap(attributedPhoto.bitmap);
                     }
                 }
@@ -156,7 +136,6 @@ public class CrimeActivity extends AppCompatActivity implements GoogleApiClient.
 
     @Override
     public void onConnected(Bundle bundle) {
-        Log.d(TAG, "Connected");
         getPlacePhoto();
     }
 
@@ -181,14 +160,13 @@ public class CrimeActivity extends AppCompatActivity implements GoogleApiClient.
                         new Response.Listener<String>() {
                             @Override
                             public void onResponse(String response) {
-                                Log.d(TAG, response);
                                 parseJSON(response);
                             }
                         },
                         new Response.ErrorListener() {
                             @Override
                             public void onErrorResponse(VolleyError error) {
-                                Log.d(TAG, "Response error");
+                                error.printStackTrace();
                             }
                         }) {
 
@@ -222,21 +200,15 @@ public class CrimeActivity extends AppCompatActivity implements GoogleApiClient.
                     .getPlacePhotos(mGoogleApiClient, placeId).await();
 
             if (result.getStatus().isSuccess()) {
-                Log.d(TAG, "Result success");
                 PlacePhotoMetadataBuffer photoMetadataBuffer = result.getPhotoMetadata();
-                Log.d(TAG, "Photo count: " + photoMetadataBuffer.getCount());
                 if (photoMetadataBuffer.getCount() > 0 && !isCancelled()) {
-                    Log.d(TAG, "Result is not cancelled");
-                    // Get the first bitmap and its attributions.
                     PlacePhotoMetadata photo = photoMetadataBuffer.get(0);
                     CharSequence attribution = photo.getAttributions();
-                    // Load a scaled bitmap for this photo.
                     Bitmap image = photo.getScaledPhoto(mGoogleApiClient, mWidth, mHeight).await()
                             .getBitmap();
 
                     attributedPhoto = new AttributedPhoto(attribution, image);
                 }
-                // Release the PlacePhotoMetadataBuffer.
                 photoMetadataBuffer.release();
             }
             return attributedPhoto;

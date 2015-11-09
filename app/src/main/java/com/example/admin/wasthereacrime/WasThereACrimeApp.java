@@ -12,7 +12,7 @@ public class WasThereACrimeApp extends Application {
 
     private WasThereACrimeApp instance;
 
-    private List<Crime> crimes = new ArrayList<>();
+    private ArrayList<Crime> crimes = new ArrayList<>();
 
     private LatLng myLocation = new LatLng(0.0, 0.0);
 
@@ -37,7 +37,7 @@ public class WasThereACrimeApp extends Application {
         crimes = newCrimes;
     }
 
-    public List<Crime> getCrimes() {
+    public ArrayList<Crime> getCrimes() {
         return crimes;
     }
 
@@ -48,5 +48,4 @@ public class WasThereACrimeApp extends Application {
     public void setMyLocation(LatLng location) {
         myLocation = location;
     }
-
 }

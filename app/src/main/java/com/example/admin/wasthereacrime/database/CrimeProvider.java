@@ -16,9 +16,6 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashSet;
 
-/**
- * Created by admin on 2015-11-05.
- */
 public class CrimeProvider extends ContentProvider{
 
     private static final String TAG = CrimeProvider.class.getSimpleName();
@@ -63,7 +60,6 @@ public class CrimeProvider extends ContentProvider{
     @Nullable
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
-        Log.d(TAG, "QUERY");
         projection = projection == null ? ALL_COLUMNS : projection;
         sortOrder = sortOrder == null ? CrimeColumns._ID : sortOrder;
 
@@ -193,12 +189,12 @@ public class CrimeProvider extends ContentProvider{
     }
 
     public interface CrimeColumns extends BaseColumns {
-        public static final String COL_CRIME_ID = "crime_id";
-        public static final String COL_DESCRIPTION = "description";
-        public static final String COL_DATE = "date";
-        public static final String COL_TIME = "time";
-        public static final String COL_LAT = "lat";
-        public static final String COL_LNG = "lng";
+        String COL_CRIME_ID = "crime_id";
+        String COL_DESCRIPTION = "description";
+        String COL_DATE = "date";
+        String COL_TIME = "time";
+        String COL_LAT = "lat";
+        String COL_LNG = "lng";
     }
 
     public class MyDatabaseHelper extends SQLiteOpenHelper {

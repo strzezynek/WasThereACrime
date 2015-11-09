@@ -2,17 +2,13 @@ package com.example.admin.wasthereacrime.activity;
 
 import android.app.Activity;
 import android.app.LoaderManager;
-import android.content.ContentValues;
 import android.content.CursorLoader;
 import android.content.Intent;
 import android.content.Loader;
 import android.database.Cursor;
-import android.location.Location;
-import android.net.Uri;
 import android.os.AsyncTask;
 import android.support.design.widget.FloatingActionButton;
 import android.os.Bundle;
-import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.View;
@@ -27,8 +23,11 @@ import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 import com.example.admin.wasthereacrime.R;
 import com.example.admin.wasthereacrime.WasThereACrimeApp;
-import com.example.admin.wasthereacrime.adapter.CrimeCursorAdapter;
 import com.example.admin.wasthereacrime.database.CrimeProvider;
+import com.example.admin.wasthereacrime.database.DBOperator;
+import com.example.admin.wasthereacrime.database.InsertTask;
+import com.example.admin.wasthereacrime.helper.CrimeParserTask;
+import com.example.admin.wasthereacrime.helper.DialogHelper;
 import com.example.admin.wasthereacrime.helper.HelpNotifier;
 import com.example.admin.wasthereacrime.helper.StringParser;
 import com.example.admin.wasthereacrime.model.Crime;
@@ -53,15 +52,19 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, LoaderManager.LoaderCallbacks<Cursor> {
+public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback,
+        LoaderManager.LoaderCallbacks<Cursor>, CrimeParserTask.OnRespondParsedListener {
 
     private static final String TAG = MapsActivity.class.getSimpleName();
 
+    private static final String EXTRA_CONNECTION_SUCCESS = "connection_success";
     private static final String EXTRA_CHOOSING_LOCATION = "choosing_location";
     private static final String EXTRA_START_DATE = "start_date";
     private static final String EXTRA_END_DATE = "end_date";
     private static final String EXTRA_LATITUDE = "latitude";
     private static final String EXTRA_LONGITUDE = "longitude";
+
+    private static final int RADIUS_IN_METERS = 5000;
 
     private WasThereACrimeApp app;
 
@@ -88,12 +91,9 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private EditText endDateEdit;
     private Button showBtn;
 
-    private CrimeCursorAdapter cursorAdapter;
     private Cursor crimeCursor = null;
+    private DBOperator dbOperator = null;
     private boolean connectionSuccess = true;
-    private String[] projection;
-    private String selection;
-    private String[] selectionArgs;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -130,7 +130,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
-
         mapFragment.getMapAsync(this);
     }
 
@@ -157,9 +156,18 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             @Override
             public void onClick(View v) {
                 Intent intent = new Intent(MapsActivity.this, CrimeListActivity.class);
-                startActivity(intent);
+                intent.putExtra(EXTRA_CONNECTION_SUCCESS, connectionSuccess);
+                startActivityForResult(intent, 100);
             }
         });
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (crimeCursor != null) {
+            crimeCursor.close();
+        }
     }
 
     @Override
@@ -173,18 +181,8 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         finish();
     }
 
-    /**
-     * Manipulates the map once available.
-     * This callback is triggered when the map is ready to be used.
-     * This is where we can add markers or lines, add listeners or move the camera. In this case,
-     * we just add a marker near Sydney, Australia.
-     * If Google Play services is not installed on the device, the user will be prompted to install
-     * it inside the SupportMapFragment. This method will only be triggered once the user has
-     * installed Google Play services and returned to the app.
-     */
     @Override
     public void onMapReady(GoogleMap googleMap) {
-//        Log.d(TAG, "MapReady");
         mMap = googleMap;
         mMap.setMyLocationEnabled(true);
 
@@ -193,32 +191,19 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         mapSettings.setMapToolbarEnabled(true);
         mapSettings.setAllGesturesEnabled(true);
 
-        LatLng location = new LatLng(latitude, longitude);
-        latitude = location.latitude;
-        longitude = location.longitude;
-//        Log.d(TAG, "Loc: " + latitude + " " + longitude);
-
-        marker = mMap.addMarker(new MarkerOptions().position(location).title("Chosen location")
-                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)));
-        marker.setDraggable(true);
-        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(location, 10));
+        addChosenLocationMarker();
         mMap.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
             @Override
             public void onMapClick(LatLng latLng) {
                 marker.remove();
                 latitude = latLng.latitude;
                 longitude = latLng.longitude;
-                Log.d(TAG, "Loc: " + latitude + " " + longitude);
 
                 if (!choosingLocation) {
                     getNewCrimeData();
                 }
 
-                //TODO marker dragable
-                marker = mMap.addMarker(new MarkerOptions().position(latLng).title("Chosen location")
-                        .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)));
-                marker.setDraggable(true);
-                mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng));
+                addChosenLocationMarker();
             }
         });
 
@@ -227,24 +212,28 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
-    private void markCrimesOnMap() {
+    private void addChosenLocationMarker() {
+        LatLng latLng = new LatLng(latitude, longitude);
+        marker = mMap.addMarker(new MarkerOptions().position(latLng).title("Chosen location")
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)));
+        marker.setDraggable(true);
+        mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 10));
+    }
+
+    public void markCrimesOnMap() {
         LatLngBounds.Builder boundsBuilder = new LatLngBounds.Builder();
         if (connectionSuccess) {
             for (Crime c : app.getCrimes()) {
-                Marker m = addMarker(c);
-                boundsBuilder.include(m.getPosition());
-                coordinates.add(c.getLatLng());
+                addMarkerAndCoords(c, boundsBuilder);
             }
         } else {
             crimeCursor.moveToFirst();
             while (!crimeCursor.isAfterLast()) {
-                LatLng cLatLng = getCrimeLatLngFromCursor(crimeCursor);
-                if (isCrimeInRadius(cLatLng)) {
-                    Crime c = createCrimeFromCursor(crimeCursor);
-
-                    Marker m = addMarker(c);
-                    boundsBuilder.include(m.getPosition());
-                    coordinates.add(c.getLatLng());
+                LatLng cLatLng = dbOperator.getCrimeLatLngFromCursor(crimeCursor);
+                if (Crime.isCrimeInRadius(new LatLng(latitude, longitude), cLatLng,
+                        RADIUS_IN_METERS)) {
+                    Crime c = dbOperator.getCrimeFromCursor(crimeCursor);
+                    addMarkerAndCoords(c, boundsBuilder);
                 }
                 crimeCursor.moveToNext();
             }
@@ -252,12 +241,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         if (app.getCrimes().size() > 0 || coordinates.size() > 0) {
             mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(boundsBuilder.build(), 30));
         } else {
-            AlertDialog.Builder builder = new AlertDialog.Builder(MapsActivity.this);
-            builder.setTitle("No crimes found").setMessage("No crimes found in chosen area");
-            AlertDialog dialog = builder.create();
-            dialog.show();
-            Log.d(TAG, "test");
+            DialogHelper.showAlertDialog(MapsActivity.this, "No crimes found",
+                    "No crimes found in chosen area");
         }
+    }
+
+    private void addMarkerAndCoords(Crime c, LatLngBounds.Builder boundsBuilder) {
+        Marker m = addMarker(c);
+        boundsBuilder.include(m.getPosition());
+        coordinates.add(c.getLatLng());
     }
 
     private Marker addMarker(Crime crime) {
@@ -284,42 +276,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
-    private boolean isCrimeInRadius(LatLng crimeLatLng) {
-        float[] result = new float[3];
-        Location.distanceBetween(latitude, longitude, crimeLatLng.latitude, crimeLatLng.longitude,
-                result);
-
-        if (result[0] <= 5000){
-            return true;
-        }
-        return false;
-    }
-
-    private LatLng getCrimeLatLngFromCursor(Cursor cursor) {
-        Double cLat = Double.parseDouble(cursor.getString(
-                cursor.getColumnIndexOrThrow(CrimeProvider.CrimeColumns.COL_LAT)));
-        Double cLng = Double.parseDouble(cursor.getString(
-                cursor.getColumnIndexOrThrow(CrimeProvider.CrimeColumns.COL_LNG)));
-        return new LatLng(cLat, cLng);
-    }
-
-    private Crime createCrimeFromCursor(Cursor cursor) {
-        String cId = cursor.getString(
-                cursor.getColumnIndexOrThrow(CrimeProvider.CrimeColumns.COL_CRIME_ID));
-        String cDescr = cursor.getString(
-                cursor.getColumnIndexOrThrow(CrimeProvider.CrimeColumns.COL_DESCRIPTION));
-        String cDate = cursor.getString(
-                cursor.getColumnIndexOrThrow(CrimeProvider.CrimeColumns.COL_DATE));
-        String cTime = cursor.getString(
-                cursor.getColumnIndexOrThrow(CrimeProvider.CrimeColumns.COL_TIME));
-        String cLat = cursor.getString(
-                cursor.getColumnIndexOrThrow(CrimeProvider.CrimeColumns.COL_LAT));
-        String cLng = cursor.getString(
-                cursor.getColumnIndexOrThrow(CrimeProvider.CrimeColumns.COL_LNG));
-        return new Crime(cId, cDescr, cDate + " " + cTime, Double.parseDouble(cLat),
-                Double.parseDouble(cLng));
-    }
-
     private void getNewCrimeData() {
         turnOnHeatMap(false);
         removeMarkers();
@@ -333,7 +289,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         Log.d(TAG, "Connecting with API: " + apiUrl);
         RequestQueue reqQueue = Volley.newRequestQueue(this);
 
-        StringRequest crimeDataRequest = new StringRequest(Request.Method.GET, apiUrl,//tmpUrl,
+        StringRequest crimeDataRequest = new StringRequest(Request.Method.GET, apiUrl,
                 new Response.Listener<String>() {
                     @Override
                     public void onResponse(String response) {
@@ -347,16 +303,10 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     public void onErrorResponse(VolleyError error) {
                         Log.d(TAG, "Response error");
                         connectionSuccess = false;
-                        AlertDialog.Builder dialogBuilder
-                                = new AlertDialog.Builder(MapsActivity.this);
-                        dialogBuilder.setTitle("Connection failed")
-                                .setMessage("Connection with remote API failed. Getting crime data from DB if it exists");
-                        dialogBuilder.create().show();
+                        dbOperator = new DBOperator();
+                        DialogHelper.showAlertDialog(MapsActivity.this, "Connection failed",
+                                "Connection with remote API failed. Getting crime data from DB if it exists");
 
-                        projection = new String[]{};
-                        selection = CrimeProvider.CrimeColumns.COL_DATE + " BETWEEN ? AND ?";
-                        selectionArgs = new String[]{StringParser.formatDateAsJulian(startDate),
-                                StringParser.formatDateAsJulian(endDate)};
                         getLoaderManager().initLoader(0, null, MapsActivity.this);
                     }
                 }) {
@@ -369,7 +319,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
                 return headers;
             }
-
         };
 
         reqQueue.add(crimeDataRequest);
@@ -377,43 +326,22 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     private void parseResponseAndCreateCrimes(String response) {
         app.clearCrimes();
-
-        Log.d(TAG, response);
-        Gson gson = new Gson();
-        ArrayList<Crime> crimes;
-        Type type = new TypeToken<ArrayList<Crime>>(){}.getType();
-        crimes = gson.fromJson(response, type);
-        app.addCrimes(crimes);
-
-        new InsertTask().execute(crimes);
-
-        markCrimesOnMap();
+        new CrimeParserTask(MapsActivity.this).execute(response);
     }
 
     private String prepareUrl() {
-        StringBuilder sb = new StringBuilder();
-
-        sb.append(baseUrl);
-        sb.append("enddate=");
-        sb.append(StringParser.getProperDateFormat(endDate));
-        sb.append("&lat=");
-        sb.append(latitude);
-        sb.append("&long=");
-        sb.append(longitude);
-        sb.append("&startdate=");
-        sb.append(StringParser.getProperDateFormat(startDate));
-
-        return sb.toString();
+        return StringParser.prepareCrimeApiUrl(baseUrl, startDate, endDate, String.valueOf(latitude),
+                String.valueOf(longitude));
     }
 
     @Override
     public Loader<Cursor> onCreateLoader(int id, Bundle args) {
-//        projection = new String[]{};
-//        String selection = "";
-//        String[] selectionArgs = {};
-
-        return new CursorLoader(MapsActivity.this, CrimeProvider.CONTENT_URI, projection, selection, selectionArgs,
-                null);
+        String[] projection = {};
+        String selection = CrimeProvider.CrimeColumns.COL_DATE + " BETWEEN ? AND ?";
+        String[] selectionArgs = new String[]{StringParser.formatDateAsJulian(startDate),
+                StringParser.formatDateAsJulian(endDate)};
+        return new CursorLoader(MapsActivity.this, CrimeProvider.CONTENT_URI, projection, selection,
+                selectionArgs, null);
     }
 
     @Override
@@ -421,71 +349,18 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         crimeCursor = data;
         Log.d(TAG, "Crimes retrieved: " + crimeCursor.getCount());
         markCrimesOnMap();
-//        cursorAdapter.swapCursor(data);
     }
 
     @Override
     public void onLoaderReset(Loader<Cursor> loader) {
         crimeCursor = null;
-//        cursorAdapter.swapCursor(null);
     }
 
-    private class InsertTask extends AsyncTask<ArrayList<Crime>, Integer, Integer> {
+    @Override
+    public void onRespondParsed(ArrayList<Crime> crimes) {
+        app.addCrimes(crimes);
+        new InsertTask(MapsActivity.this).execute(app.getCrimes());
 
-        @Override
-        protected Integer doInBackground(ArrayList<Crime>... params) {
-            ArrayList<Crime> crimes = params[0];
-//            Log.d(TAG, "Crimes count: " + crimes.size());
-            int crimesInserted = 0;
-            for (Crime c : crimes) {
-                if (isCrimeUnique(c)) {
-//                    Log.d(TAG, "Unique crime! Inserting...");
-                    Uri uri = getContentResolver().insert(CrimeProvider.CONTENT_URI,
-                            getContentValues(c));
-                    if (uri != null) {
-                        crimesInserted++;
-                    }
-                }
-            }
-            return crimesInserted;
-        }
-
-        @Override
-        protected void onPostExecute(Integer crimesNum) {
-            Log.d(TAG, "Crimes inserted into DB: " + crimesNum);
-        }
-
-        private boolean isCrimeUnique(Crime crime) {
-            Cursor cursor;
-            String[] projection = {CrimeProvider.CrimeColumns.COL_CRIME_ID};
-            String selection = CrimeProvider.CrimeColumns.COL_CRIME_ID + " = ?";
-            String[] selectionArgs = {crime.getId()};
-            cursor = getContentResolver().query(CrimeProvider.CONTENT_URI,
-                    projection, selection, selectionArgs, null);
-            if (cursor != null && cursor.getCount() > 0) {
-//                Log.d(TAG, "Crime not unique");
-                cursor.close();
-                return false;
-            } else if (cursor != null && cursor.getCount() == 0) {
-//                Log.d(TAG, "Crime unique");
-                cursor.close();
-                return true;
-            } else {
-//                Log.d(TAG, "Cursor null");
-                return false;
-            }
-        }
-
-        private ContentValues getContentValues(Crime crime) {
-            ContentValues values = new ContentValues();
-            values.put(CrimeProvider.CrimeColumns.COL_CRIME_ID, crime.getId());
-            values.put(CrimeProvider.CrimeColumns.COL_DESCRIPTION, crime.getDescription());
-            String[] dateTimeSplit = StringParser.splitDateTime(crime.getDatetime());
-            values.put(CrimeProvider.CrimeColumns.COL_DATE, StringParser.formatDateAsJulian(dateTimeSplit[0]));
-            values.put(CrimeProvider.CrimeColumns.COL_TIME, dateTimeSplit[1]);
-            values.put(CrimeProvider.CrimeColumns.COL_LAT, String.valueOf(crime.getLatitude()));
-            values.put(CrimeProvider.CrimeColumns.COL_LNG, String.valueOf(crime.getLongitude()));
-            return values;
-        }
+        markCrimesOnMap();
     }
 }
